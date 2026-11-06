@@ -58,12 +58,50 @@
       Sign in securely
      </button>
     </form>
-    <p class="error" id="loginMessage" role="status">
+     <p class="error" id="loginMessage" role="status" aria-live="polite">
     </p>
+     <button class="text-button" id="forgotPassword" type="button">
+      Forgot your password?
+     </button>
+     <form id="recoveryForm" hidden>
+      <label class="field">
+       Account email address
+       <input id="recoveryEmail" type="email" autocomplete="email" required/>
+      </label>
+      <button class="primary-btn wide" type="submit">
+       Send password reset link
+      </button>
+      <button class="text-button" id="cancelRecovery" type="button">
+       Back to sign in
+      </button>
+      <p class="muted" id="recoveryMessage" role="status" aria-live="polite"></p>
+     </form>
     <p class="muted">
      Access is granted only by the family administrator. There is no public registration.
     </p>
    </section>
+    <!-- First-time invitation and password recovery -->
+    <section class="portal-login" id="passwordSetup" hidden>
+     <div class="login-emblem" aria-hidden="true">✳</div>
+     <p class="overline">PRIVATE &middot; FAMILY MEMBERS ONLY</p>
+     <h1 id="passwordHeading">Create your <em>password</em></h1>
+     <p class="muted" id="passwordDescription">
+      Set a password for your approved family account to access the planning dashboard.
+     </p>
+     <form id="passwordSetupForm">
+      <label class="field">
+       New password
+       <input id="newPassword" type="password" autocomplete="new-password" minlength="8" required/>
+      </label>
+      <label class="field">
+       Confirm new password
+       <input id="confirmPassword" type="password" autocomplete="new-password" minlength="8" required/>
+      </label>
+      <button class="primary-btn wide" type="submit">Save password and continue</button>
+     </form>
+     <p class="error" id="passwordMessage" role="status" aria-live="polite"></p>
+     <button class="text-button" id="cancelPasswordSetup" type="button">Sign out</button>
+    </section>
    <section hidden="" id="dashboard">
     <div class="portal-eyebrow">
      <span class="private-indicator">

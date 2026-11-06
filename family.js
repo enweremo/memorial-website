@@ -1,5 +1,11 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './config.js';
+// Read the invitation/recovery type before supabase-js processes the URL hash.
+// The tokens themselves are managed by Supabase; never store them in app code.
+const linkHash = new URLSearchParams(window.location.hash.slice(1));
+const linkQuery = new URLSearchParams(window.location.search);
+const initialLinkType = linkHash.get('type') || linkQuery.get('type');
+const linkError = linkHash.get('error_description') || linkQuery.get('error_description');
 const $ = id => document.getElementById(id);
 const configured = SUPABASE_URL.startsWith('https://') && !SUPABASE_PUBLISHABLE_KEY.startsWith('YOUR_');
 const db = configured ? createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY) : null;
@@ -9,21 +15,160 @@ const deleteAllowed = () => memberRole === 'admin';
 const money = n => new Intl.NumberFormat(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 0 }).format(Number(n) || 0);
 const escapeHTML = x => String(x ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const statusClass = s => s === 'Completed' ? 'completed' : s === 'In progress' ? 'in-progress' : s === 'Blocked' ? 'blocked' : '';
-function showLogin(msg = '') { $('dashboard').hidden = true; $('login').hidden = false; $('loginMessage').textContent = msg; }
+// ------------------------------------------------------------
+// Authentication: sign in, invitation, and password recovery
+// ------------------------------------------------------------
+let passwordSetupRequired = false;
+
+function showLogin(message = '') {
+    $('dashboard').hidden = true;
+    $('passwordSetup').hidden = true;
+    $('login').hidden = false;
+    $('loginMessage').textContent = message;
+}
+
+function showPasswordSetup(mode = 'invite') {
+    passwordSetupRequired = true;
+    $('login').hidden = true;
+    $('dashboard').hidden = true;
+    $('passwordSetup').hidden = false;
+    $('passwordSetupForm').reset();
+    $('passwordMessage').textContent = '';
+    const recovery = mode === 'recovery';
+    $('passwordHeading').textContent = recovery ? 'Set a new password' : 'Create your password';
+    $('passwordDescription').textContent = recovery
+        ? 'Choose a new password for your existing family account.'
+        : 'Your family invitation has been accepted. Create a password to access the private planning dashboard.';
+    $('newPassword').focus();
+}
+
 async function initialize() {
     if (!configured) {
         showLogin('Setup required: enter your Supabase URL and publishable key in config.js.');
         $('loginForm').querySelector('button').disabled = true;
         return;
     }
-    const { data: { session } } = await db.auth.getSession();
-    if (session)
-        await openDashboard(session.user);
-    else
-        showLogin();
-    db.auth.onAuthStateChange((event, session) => { if (event === 'SIGNED_OUT' || !session)
-        showLogin(); });
+
+    // Supabase emits PASSWORD_RECOVERY when a recovery link is accepted.
+    // This callback is intentionally synchronous to avoid auth-client deadlocks.
+    db.auth.onAuthStateChange((event, session) => {
+        if (event === 'PASSWORD_RECOVERY') {
+            showPasswordSetup('recovery');
+        } else if (event === 'SIGNED_OUT') {
+            passwordSetupRequired = false;
+            memberRole = 'viewer';
+            tasks = [];
+            showLogin();
+        }
+    });
+
+    try {
+        // Support token_hash links if the email template uses that format.
+        // The default Supabase invite typically uses a #access_token fragment.
+        if (linkQuery.get('token_hash') && ['invite', 'recovery'].includes(initialLinkType)) {
+            const { error } = await db.auth.verifyOtp({
+                token_hash: linkQuery.get('token_hash'),
+                type: initialLinkType,
+            });
+            if (error) throw error;
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+
+        const { data: { session }, error } = await db.auth.getSession();
+        if (error) throw error;
+
+        if (linkError) {
+            showLogin('Invitation or reset link could not be used: ' + linkError);
+        } else if (session && ['invite', 'recovery'].includes(initialLinkType)) {
+            showPasswordSetup(initialLinkType);
+        } else if (session && passwordSetupRequired) {
+            // The auth event already opened the password-creation form.
+        } else if (session) {
+            await openDashboard(session.user);
+        } else if (['invite', 'recovery'].includes(initialLinkType)) {
+            showLogin('This link has expired or is invalid. Ask the administrator for a new invitation, or use Forgot your password.');
+        } else {
+            showLogin();
+        }
+    } catch (error) {
+        showLogin('Unable to complete account setup: ' + error.message);
+    }
 }
+
+$('passwordSetupForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!db) return;
+    const password = $('newPassword').value;
+    if (password.length < 8) {
+        $('passwordMessage').textContent = 'Use at least 8 characters.';
+        return;
+    }
+    if (password !== $('confirmPassword').value) {
+        $('passwordMessage').textContent = 'The passwords do not match.';
+        return;
+    }
+    const button = $('passwordSetupForm').querySelector('[type="submit"]');
+    button.disabled = true;
+    $('passwordMessage').textContent = 'Saving your password…';
+    try {
+        const { error } = await db.auth.updateUser({ password });
+        if (error) throw error;
+        passwordSetupRequired = false;
+        // Remove any auth link parameters remaining in the address bar.
+        window.history.replaceState({}, document.title, window.location.pathname);
+        const { data: { user }, error: userError } = await db.auth.getUser();
+        if (userError || !user) throw userError || new Error('Please sign in with your new password.');
+        await openDashboard(user);
+    } catch (error) {
+        $('passwordMessage').textContent = 'Unable to save password: ' + error.message;
+    } finally {
+        button.disabled = false;
+    }
+});
+
+$('cancelPasswordSetup').addEventListener('click', async () => {
+    if (db) await db.auth.signOut();
+    passwordSetupRequired = false;
+    showLogin();
+});
+
+$('forgotPassword').addEventListener('click', () => {
+    $('recoveryEmail').value = $('email').value.trim();
+    $('recoveryMessage').textContent = '';
+    $('recoveryForm').hidden = false;
+    $('loginForm').hidden = true;
+    $('forgotPassword').hidden = true;
+});
+
+$('cancelRecovery').addEventListener('click', () => {
+    $('recoveryForm').hidden = true;
+    $('loginForm').hidden = false;
+    $('forgotPassword').hidden = false;
+    $('recoveryMessage').textContent = '';
+});
+
+$('recoveryForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!db) return;
+    const button = $('recoveryForm').querySelector('[type="submit"]');
+    button.disabled = true;
+    $('recoveryMessage').textContent = 'Sending password reset link…';
+    try {
+        const { error } = await db.auth.resetPasswordForEmail(
+            $('recoveryEmail').value.trim(),
+            { redirectTo: new URL('family.html', window.location.href).origin +
+                new URL('family.html', window.location.href).pathname }
+        );
+        if (error) throw error;
+        $('recoveryMessage').textContent =
+            'If this email belongs to an existing account, a reset link will be sent. Check your inbox and spam folder.';
+    } catch (error) {
+        $('recoveryMessage').textContent = 'Unable to send reset link: ' + error.message;
+    } finally {
+        button.disabled = false;
+    }
+});
+
 async function openDashboard(user) {
     const { data: member, error } = await db.from('family_members').select('role').eq('user_id', user.id).maybeSingle();
     if (error || !member) {
