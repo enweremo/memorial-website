@@ -5,6 +5,7 @@ const configured = SUPABASE_URL.startsWith('https://') && !SUPABASE_PUBLISHABLE_
 const db = configured ? createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY) : null;
 let memberRole = 'viewer', tasks = [];
 const writeAllowed = () => memberRole === 'admin' || memberRole === 'editor';
+const deleteAllowed = () => memberRole === 'admin';
 const money = n => new Intl.NumberFormat(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 0 }).format(Number(n) || 0);
 const escapeHTML = x => String(x ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const statusClass = s => s === 'Completed' ? 'completed' : s === 'In progress' ? 'in-progress' : s === 'Blocked' ? 'blocked' : '';
@@ -62,7 +63,7 @@ function render() {
     $('filterCategory').value = cats.includes(existing) ? existing : '';
     const term = $('searchTasks').value.trim().toLocaleLowerCase();
     const rows = tasks.filter(t => (!$('filterCategory').value || t.category === $('filterCategory').value) && (!$('filterStatus').value || t.status === $('filterStatus').value) && (!term || [t.title, t.category, t.assigned_to, t.notes].some(v => String(v ?? '').toLocaleLowerCase().includes(term))));
-    $('taskRows').innerHTML = rows.map(t => `<tr><td><strong>${escapeHTML(t.title)}</strong><div class="muted">${escapeHTML(t.category)}</div></td><td>${escapeHTML(t.assigned_to || '—')}</td><td>${escapeHTML(t.due_date || '—')}</td><td><span class="status ${statusClass(t.status)}">${escapeHTML(t.status)}</span></td><td>${money(t.budget)}</td><td>${money(t.actual)}</td><td>${writeAllowed() ? `<button class="text-button" data-edit="${t.id}">Edit</button>` : 'View only'}</td></tr>`).join('');
+    $('taskRows').innerHTML = rows.map(t => `<tr><td><strong>${escapeHTML(t.title)}</strong><div class="muted">${escapeHTML(t.category)}</div></td><td>${escapeHTML(t.assigned_to || '—')}</td><td>${escapeHTML(t.due_date || '—')}</td><td><span class="status ${statusClass(t.status)}">${escapeHTML(t.status)}</span></td><td>${money(t.budget)}</td><td>${money(t.actual)}</td><td>${writeAllowed() ? `<button class="text-button" type="button" data-edit="${t.id}" aria-label="Edit ${escapeHTML(t.title)}">Edit</button>` : 'View only'}${deleteAllowed() ? ` <button class="text-button" type="button" data-delete="${t.id}" aria-label="Delete ${escapeHTML(t.title)}" style="color:#a44747">Delete</button>` : ''}</td></tr>`).join('');
     $('taskMessage').textContent = rows.length ? '' : tasks.length ? 'No tasks match the filters.' : 'No preparation tasks yet. Add your first task.';
 }
 $('loginForm').addEventListener('submit', async (e) => { e.preventDefault(); if (!db)
@@ -92,9 +93,53 @@ $('exportCsv').addEventListener('click', () => { if ($('dashboard').hidden)
 function openEditor(task) { $('taskForm').reset(); $('formError').textContent = ''; $('dialogTitle').textContent = task ? 'Edit task' : 'Add task'; $('taskId').value = task?.id || ''; $('taskTitle').value = task?.title || ''; $('taskCategory').value = task?.category || 'Funeral arrangements'; $('taskStatus').value = task?.status || 'Not started'; $('taskOwner').value = task?.assigned_to || ''; $('taskDue').value = task?.due_date || ''; $('taskBudget').value = task?.budget ?? 0; $('taskActual').value = task?.actual ?? 0; $('taskNotes').value = task?.notes || ''; $('taskDialog').showModal(); }
 $('addTask').addEventListener('click', () => { if (writeAllowed())
     openEditor(null); });
-$('taskRows').addEventListener('click', e => { const btn = e.target.closest('[data-edit]'); if (!btn || !writeAllowed())
-    return; const task = tasks.find(t => t.id === btn.dataset.edit); if (task)
-    openEditor(task); });
+// Event delegation supports Edit and Admin-only Delete actions for every task row.
+$('taskRows').addEventListener('click', async (event) => {
+    const button = event.target.closest('button[data-edit], button[data-delete]');
+    if (!button || button.disabled) return;
+
+    const taskId = button.dataset.edit || button.dataset.delete;
+    const task = tasks.find(item => item.id === taskId);
+    if (!task) return;
+
+    // Editors and Admins can edit tasks.
+    if (button.dataset.edit) {
+        if (writeAllowed()) openEditor(task);
+        return;
+    }
+
+    // Only Admins may delete tasks. Supabase RLS independently enforces this.
+    if (!deleteAllowed()) return;
+
+    const confirmed = window.confirm(
+        `Delete "${task.title}"?\n\nThis permanently removes the task and its budget details. This action cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    button.disabled = true;
+    $('taskMessage').textContent = 'Deleting task…';
+
+    try {
+        // select() returns the deleted row so we can detect an RLS rejection
+        // that otherwise might return no error but delete zero rows.
+        const { data, error } = await db
+            .from('tasks')
+            .delete()
+            .eq('id', taskId)
+            .select('id');
+
+        if (error) throw error;
+        if (!data || data.length !== 1) {
+            throw new Error('The task was not deleted. Confirm your Admin permissions and refresh.');
+        }
+
+        await refresh(); // Recalculates task counts, progress and budgets.
+        $('taskMessage').textContent = `Deleted task: ${task.title}`;
+    } catch (error) {
+        $('taskMessage').textContent = `Unable to delete task: ${error.message}`;
+        button.disabled = false;
+    }
+});
 $('cancelTask').addEventListener('click', () => $('taskDialog').close());
 $('taskForm').addEventListener('submit', async (e) => {
     e.preventDefault();
