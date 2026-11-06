@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+ <head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1" name="viewport"/>
+  <meta content="noindex,nofollow" name="robots"/>
+  <title>
+   Family Planning Portal | Memorial
+  </title>
+  <link href="styles.css" rel="stylesheet"/>
+ </head>
+ <body class="portal-bg portal-v2">
+  <header class="portal-header">
+   <a class="brand" href="index.html">
+    <span class="brand-symbol">
+     ✳
+    </span>
+    <span>
+     Everlasting
+     <small>
+      FAMILY COORDINATION
+     </small>
+    </span>
+   </a>
+   <a class="small portal-return" href="index.html">
+    &larr; Return to public memorial
+   </a>
+  </header>
+  <main class="portal-shell">
+   <!-- Portal Login -->
+   <section class="portal-login" id="login">
+    <div class="login-emblem">
+     ✳
+    </div>
+    <p class="overline">
+     PRIVATE &middot; FAMILY MEMBERS ONLY
+    </p>
+    <h1>
+     Welcome to the
+     <br/>
+     <em>
+      family portal
+     </em>
+    </h1>
+    <p class="muted">
+     A shared space to coordinate preparations with care. Sign in using your approved family account.
+    </p>
+    <form id="loginForm">
+     <label class="field">
+      Email address
+      <input autocomplete="email" id="email" required="" type="email"/>
+     </label>
+     <label class="field">
+      Password
+      <input autocomplete="current-password" id="password" required="" type="password"/>
+     </label>
+     <button class="primary-btn wide" type="submit">
+      Sign in securely
+     </button>
+    </form>
+    <p class="error" id="loginMessage" role="status">
+    </p>
+    <p class="muted">
+     Access is granted only by the family administrator. There is no public registration.
+    </p>
+   </section>
+   <section hidden="" id="dashboard">
+    <div class="portal-eyebrow">
+     <span class="private-indicator">
+      ● PRIVATE WORKSPACE
+     </span>
+     <span>
+      MEMORIAL PLANNING &middot; FAMILY ONLY
+     </span>
+    </div>
+    <div class="dashboard-head">
+     <div>
+      <p class="overline">
+       OVERVIEW &amp; COORDINATION
+      </p>
+      <h1>
+       Preparation
+       <em>
+        dashboard
+       </em>
+      </h1>
+      <p class="muted" id="welcome">
+      </p>
+     </div>
+     <div class="dashboard-actions">
+      <button class="secondary-btn" id="refreshTasks" type="button">
+       &orarr; Refresh
+      </button>
+      <button class="secondary-btn" id="logout" type="button">
+       Sign out
+      </button>
+     </div>
+    </div>
+    <div class="stats">
+     <div class="stat-card">
+      <div class="stat-label">
+       TOTAL TASKS
+      </div>
+      <div class="stat-number" id="total">
+       0
+      </div>
+     </div>
+     <div class="stat-card">
+      <div class="stat-label">
+       COMPLETED TASKS
+      </div>
+      <div class="stat-number" id="completed">
+       0
+      </div>
+     </div>
+     <div class="stat-card">
+      <div class="stat-label">
+       IN PROGRESS
+      </div>
+      <div class="stat-number" id="inProgress">
+       0
+      </div>
+     </div>
+     <div class="stat-card">
+      <div class="stat-label">
+       OVERALL PROGRESS
+      </div>
+      <div class="stat-number" id="percentage">
+       0%
+      </div>
+      <div class="progress">
+       <div class="progress-bar" id="progressBar" style="width:0%">
+       </div>
+      </div>
+     </div>
+    </div>
+    <div class="dashboard-highlights">
+     <!-- Panel Mini Panel -->
+     <section class="panel mini-panel">
+      <div class="panel-head">
+       <h2>
+        Preparation by category
+       </h2>
+       <span class="muted">
+        Completed / total
+       </span>
+      </div>
+      <div class="category-breakdown" id="categoryBreakdown">
+      </div>
+     </section>
+     <!-- Panel Mini Panel -->
+     <section class="panel mini-panel">
+      <div class="panel-head">
+       <h2>
+        Tasks requiring attention
+       </h2>
+       <span class="muted">
+        Due soon or overdue
+       </span>
+      </div>
+      <div class="upcoming-tasks" id="upcomingTasks">
+      </div>
+     </section>
+    </div>
+    <!-- Panel Task Panel -->
+    <section class="panel task-panel">
+     <div class="panel-head">
+      <div>
+       <p class="overline">
+        ACTION REGISTER
+       </p>
+       <h2>
+        Preparation checklist
+       </h2>
+      </div>
+      <div class="dashboard-actions">
+       <button class="secondary-btn" id="exportCsv" type="button">
+        &darr; Export CSV
+       </button>
+       <button class="primary-btn" hidden="" id="addTask">
+        + Add task
+       </button>
+      </div>
+      <div class="filters">
+       <label class="sr-only" for="searchTasks">
+        Search tasks
+       </label>
+       <input aria-label="Search tasks" id="searchTasks" placeholder="Search tasks, owners, notes..." type="search"/>
+       <label class="sr-only" for="filterCategory">
+        Category
+       </label>
+       <select id="filterCategory">
+        <option value="">
+         All categories
+        </option>
+       </select>
+       <label class="sr-only" for="filterStatus">
+        Status
+       </label>
+       <select id="filterStatus">
+        <option value="">
+         All statuses
+        </option>
+        <option>
+         Not started
+        </option>
+        <option>
+         In progress
+        </option>
+        <option>
+         Blocked
+        </option>
+        <option>
+         Completed
+        </option>
+       </select>
+      </div>
+      <p class="table-scroll-hint">Swipe sideways to view all task columns.</p>
+      <div class="table-wrap">
+       <table>
+        <thead>
+         <tr>
+          <th>
+           Task / category
+          </th>
+          <th>
+           Assigned to
+          </th>
+          <th>
+           Due
+          </th>
+          <th>
+           Status
+          </th>
+          <th>
+           Budget
+          </th>
+          <th>
+           Actual
+          </th>
+          <th>
+           Action
+          </th>
+         </tr>
+        </thead>
+        <tbody id="taskRows">
+        </tbody>
+       </table>
+      </div>
+      <p class="muted" id="taskMessage" role="status">
+      </p>
+     </div>
+    </section>
+    <!-- Panel -->
+    <section class="panel">
+     <div class="panel-head">
+      <div>
+       <p class="overline">
+        COST MONITORING
+       </p>
+       <h2>
+        Budget overview
+       </h2>
+      </div>
+      <span class="muted">
+       Amounts shown in a single family-selected currency
+      </span>
+     </div>
+     <div class="stats budget-stats">
+      <div class="stat-card">
+       <div class="stat-label">
+        Estimated total
+       </div>
+       <div class="stat-number" id="budgetTotal">
+        0
+       </div>
+      </div>
+      <div class="stat-card">
+       <div class="stat-label">
+        Actual spending
+       </div>
+       <div class="stat-number" id="spentTotal">
+        0
+       </div>
+      </div>
+     </div>
+     <div class="budget-summary" id="budgetSummary" role="status">
+     </div>
+    </section>
+   </section>
+  </main>
+  <dialog class="modal" id="taskDialog">
+   <form id="taskForm">
+    <input id="taskId" type="hidden"/>
+    <p class="overline">
+     FAMILY WORKPLAN
+    </p>
+    <h2 id="dialogTitle">
+     Add task
+    </h2>
+    <label class="field">
+     Task title
+     <input id="taskTitle" maxlength="160" required=""/>
+    </label>
+    <div class="form-grid">
+     <label class="field">
+      Category
+      <select id="taskCategory" required="">
+       <option>
+        Funeral arrangements
+       </option>
+       <option>
+        Venue and logistics
+       </option>
+       <option>
+        Transportation
+       </option>
+       <option>
+        Catering
+       </option>
+       <option>
+        Communication and publicity
+       </option>
+       <option>
+        Family coordination
+       </option>
+       <option>
+        Finance and procurement
+       </option>
+       <option>
+        Other
+       </option>
+      </select>
+     </label>
+     <label class="field">
+      Status
+      <select id="taskStatus">
+       <option>
+        Not started
+       </option>
+       <option>
+        In progress
+       </option>
+       <option>
+        Blocked
+       </option>
+       <option>
+        Completed
+       </option>
+      </select>
+     </label>
+     <label class="field">
+      Assigned to
+      <input id="taskOwner" maxlength="120"/>
+     </label>
+     <label class="field">
+      Due date
+      <input id="taskDue" type="date"/>
+     </label>
+     <label class="field">
+      Estimated cost
+      <input id="taskBudget" min="0" step="0.01" type="number" value="0"/>
+     </label>
+     <label class="field">
+      Actual cost
+      <input id="taskActual" min="0" step="0.01" type="number" value="0"/>
+     </label>
+    </div>
+    <label class="field">
+     Notes
+     <textarea id="taskNotes" maxlength="3000"></textarea>
+    </label>
+    <p class="error" id="formError">
+    </p>
+    <div class="form-actions">
+     <button class="secondary-btn" id="cancelTask" type="button">
+      Cancel
+     </button>
+     <button class="primary-btn" type="submit">
+      Save task
+     </button>
+    </div>
+   </form>
+  </dialog>
+  <script src="family.js" type="module">
+  </script>
+ </body>
+</html>
