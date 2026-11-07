@@ -10,6 +10,9 @@ const $ = id => document.getElementById(id);
 const configured = SUPABASE_URL.startsWith('https://') && !SUPABASE_PUBLISHABLE_KEY.startsWith('YOUR_');
 const db = configured ? createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY) : null;
 let memberRole = 'viewer', tasks = [];
+let activityRows = [];
+let activityHasMore = false;
+const ACTIVITY_PAGE_SIZE = 30;
 const writeAllowed = () => memberRole === 'admin' || memberRole === 'editor';
 const deleteAllowed = () => memberRole === 'admin';
 const money = n => new Intl.NumberFormat(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 0 }).format(Number(n) || 0);
@@ -58,6 +61,7 @@ async function initialize() {
             passwordSetupRequired = false;
             memberRole = 'viewer';
             tasks = [];
+            activityRows = [];
             showLogin();
         }
     });
@@ -170,7 +174,7 @@ $('recoveryForm').addEventListener('submit', async event => {
 });
 
 async function openDashboard(user) {
-    const { data: member, error } = await db.from('family_members').select('role').eq('user_id', user.id).maybeSingle();
+    const { data: member, error } = await db.from('family_members').select('role,display_name').eq('user_id', user.id).maybeSingle();
     if (error || !member) {
         await db.auth.signOut();
         showLogin('This account has not been approved by the family administrator.');
@@ -179,14 +183,14 @@ async function openDashboard(user) {
     memberRole = member.role;
     $('login').hidden = true;
     $('dashboard').hidden = false;
-    $('welcome').textContent = `Signed in as ${user.email} · ${memberRole}`;
+    $('welcome').textContent = `Signed in as ${member.display_name?.trim() || 'Family member'} · ${memberRole}`;
     $('addTask').hidden = !writeAllowed();
     await refresh();
 }
 async function refresh() { const { data, error } = await db.from('tasks').select('*').order('created_at', { ascending: false }); if (error) {
     $('taskMessage').textContent = 'Unable to load tasks: ' + error.message;
     return;
-} tasks = data || []; render(); }
+} tasks = data || []; render(); await loadActivity(true); }
 function render() {
     const completed = tasks.filter(t => t.status === 'Completed').length;
     const progressing = tasks.filter(t => t.status === 'In progress').length;
@@ -304,5 +308,116 @@ $('taskForm').addEventListener('submit', async (e) => {
     $('taskDialog').close();
     await refresh();
 });
-initialize();
 
+// ------------------------------------------------------------
+// Task activity history
+// Audit records are created by a PostgreSQL trigger, NEVER here.
+// This UI only reads them, with approved-member access enforced by RLS.
+// ------------------------------------------------------------
+const AUDIT_FIELDS = [
+    ['title', 'Task title'],
+    ['category', 'Category'],
+    ['status', 'Status'],
+    ['assigned_to', 'Assigned to'],
+    ['due_date', 'Due date'],
+    ['budget', 'Estimated cost'],
+    ['actual', 'Actual cost'],
+    ['notes', 'Notes']
+];
+
+function readableAuditValue(field, value) {
+    if (value === null || value === undefined || value === '') return '—';
+    if (field === 'budget' || field === 'actual') return money(value);
+    return String(value);
+}
+
+function auditChanges(entry) {
+    const before = entry.before_data || {};
+    const after = entry.after_data || {};
+    // Show only changed fields for edits, all supplied fields for creations.
+    if (entry.action === 'deleted') return [];
+    return AUDIT_FIELDS.filter(([key]) =>
+        entry.action === 'created'
+            ? (after[key] !== null && after[key] !== undefined && after[key] !== '' &&
+               (key !== 'budget' && key !== 'actual' || Number(after[key]) !== 0))
+            : JSON.stringify(before[key] ?? null) !== JSON.stringify(after[key] ?? null)
+    ).map(([key, label]) => ({
+        label,
+        previous: readableAuditValue(key, before[key]),
+        current: readableAuditValue(key, after[key])
+    }));
+}
+
+function renderActivity() {
+    const list = $('activityList');
+    const verbs = { created: 'created', updated: 'updated', deleted: 'deleted' };
+    list.innerHTML = activityRows.map(entry => {
+        const action = verbs[entry.action] || 'changed';
+        const actor = entry.actor_name || 'Database administrator';
+        const when = new Date(entry.occurred_at);
+        const timestamp = Number.isNaN(when.valueOf())
+            ? entry.occurred_at
+            : when.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+        const changed = auditChanges(entry);
+        const changesHtml = changed.length
+            ? `<details class="activity-changes"><summary>View ${changed.length} field${changed.length === 1 ? '' : 's'}</summary>
+                 <dl>${changed.map(change => `<div><dt>${escapeHTML(change.label)}</dt>
+                     ${entry.action === 'updated'
+                         ? `<dd><span class="activity-old">${escapeHTML(change.previous)}</span><span aria-hidden="true"> → </span><span>${escapeHTML(change.current)}</span></dd>`
+                         : `<dd>${escapeHTML(change.current)}</dd>`}
+                   </div>`).join('')}</dl></details>`
+            : '';
+        const deletionNote = entry.action === 'deleted'
+            ? '<span class="activity-deleted-note">Task removed; history retained</span>'
+            : '';
+        return `<li class="activity-item">
+            <span class="activity-icon activity-${escapeHTML(action)}" aria-hidden="true">${action === 'created' ? '+' : action === 'deleted' ? '−' : '↻'}</span>
+            <div class="activity-detail">
+              <div class="activity-title"><strong>${escapeHTML(actor)}</strong> ${escapeHTML(action)} <strong>${escapeHTML(entry.task_title)}</strong></div>
+              <time datetime="${escapeHTML(entry.occurred_at)}">${escapeHTML(timestamp)}</time>
+              ${deletionNote}${changesHtml}
+            </div>
+        </li>`;
+    }).join('');
+    $('loadMoreActivity').hidden = !activityHasMore;
+    if (!activityRows.length) $('activityMessage').textContent = 'No task activity recorded yet. New changes will appear here.';
+    else $('activityMessage').textContent = `${activityRows.length} most recent activity entries shown${activityHasMore ? ' — older entries available' : ''}.`;
+}
+
+async function loadActivity(reset = true) {
+    if (!db || $('dashboard').hidden) return;
+    const start = reset ? 0 : activityRows.length;
+    const button = $('loadMoreActivity');
+    const refreshButton = $('refreshActivity');
+    button.disabled = true;
+    refreshButton.disabled = true;
+    $('activityMessage').textContent = 'Loading activity history…';
+    try {
+        const { data, error } = await db.from('task_activity')
+            .select('id,task_id,task_title,action,actor_name,occurred_at,before_data,after_data')
+            .order('id', { ascending: false })
+            .range(start, start + ACTIVITY_PAGE_SIZE);
+        if (error) throw error;
+        const page = data || [];
+        activityHasMore = page.length > ACTIVITY_PAGE_SIZE;
+        const visiblePage = page.slice(0, ACTIVITY_PAGE_SIZE);
+        activityRows = reset ? visiblePage : [...activityRows, ...visiblePage];
+        renderActivity();
+    } catch (error) {
+        $('activityMessage').textContent = 'Unable to load activity history: ' + error.message +
+            ' (If the audit setup SQL has not been run, run it in Supabase first.)';
+        if (reset) {
+            activityRows = [];
+            $('activityList').replaceChildren();
+            button.hidden = true;
+        }
+    } finally {
+        button.disabled = false;
+        refreshButton.disabled = false;
+    }
+}
+
+$('refreshActivity').addEventListener('click', () => loadActivity(true));
+$('loadMoreActivity').addEventListener('click', () => loadActivity(false));
+
+initialize();

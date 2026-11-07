@@ -8,6 +8,7 @@
    Family Planning Portal | Memorial
   </title>
   <link href="styles.css" rel="stylesheet"/>
+  <link href="activity-history.css" rel="stylesheet"/>
  </head>
  <body class="portal-bg portal-v2">
   <header class="portal-header">
@@ -324,6 +325,22 @@
      </div>
      <div class="budget-summary" id="budgetSummary" role="status">
      </div>
+    </section>
+    <!-- Activity history: read-only database audit trail -->
+    <section class="panel activity-panel" aria-labelledby="activityHeading">
+      <div class="panel-head">
+        <div>
+          <p class="overline">ACCOUNTABILITY</p>
+          <h2 id="activityHeading">Task activity history</h2>
+          <p class="muted">A record of task creation, changes and deletion by family members.</p>
+        </div>
+        <button class="secondary-btn" id="refreshActivity" type="button">Refresh history</button>
+      </div>
+      <p class="muted" id="activityMessage" role="status" aria-live="polite"></p>
+      <ol class="activity-list" id="activityList" aria-label="Recent task activity"></ol>
+      <button class="secondary-btn activity-more" id="loadMoreActivity" type="button" hidden>
+        Load older activity
+      </button>
     </section>
    </section>
   </main>
