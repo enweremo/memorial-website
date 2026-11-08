@@ -2038,9 +2038,35 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
 
-/* Budget summary: two columns on desktop and mobile */
-.budget-stats { margin-top: 18px; grid-template-columns: repeat(2, minmax(0,1fr)); }
-@media (max-width: 420px) { .budget-stats { grid-template-columns: minmax(0,1fr); } }
+/* Budget overview: keep amounts readable on one line. */
+.budget-stats {
+  margin-top: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.portal-v2 .budget-stats .stat-card {
+  min-width: 0;
+}
+
+.portal-v2 .budget-stats .stat-number {
+  font-size: clamp(14px, 3.8vw, 32px);
+  line-height: 1.25;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+/* On very narrow screens, widen each card instead of clipping amounts. */
+@media (max-width: 359px) {
+  .budget-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .portal-v2 .budget-stats .stat-number {
+    font-size: 25px;
+  }
+}
 @media (min-width: 769px) { .table-scroll-hint { display: none; } }
 
 
