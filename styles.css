@@ -2038,7 +2038,7 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
 
-/* Budget overview: keep amounts readable on one line. */
+/* Budget overview — large, single-line values on every screen. */
 .budget-stats {
   margin-top: 18px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2049,8 +2049,8 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 }
 
 .portal-v2 .budget-stats .stat-number {
-  font-size: clamp(14px, 3.8vw, 32px);
-  line-height: 1.25;
+  font-size: 32px;
+  line-height: 1.2;
   letter-spacing: -0.035em;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -2058,13 +2058,19 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   word-break: normal;
 }
 
-/* On very narrow screens, widen each card instead of clipping amounts. */
-@media (max-width: 359px) {
-  .budget-stats {
+/* On phones, give each amount a full-width card rather than shrinking it. */
+@media (max-width: 550px) {
+  .portal-v2 .budget-stats {
     grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
   }
+
+  .portal-v2 .budget-stats .stat-card {
+    padding: 20px 22px;
+  }
+
   .portal-v2 .budget-stats .stat-number {
-    font-size: 25px;
+    font-size: clamp(27px, 8vw, 34px);
   }
 }
 @media (min-width: 769px) { .table-scroll-hint { display: none; } }
