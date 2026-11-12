@@ -187,10 +187,49 @@ async function openDashboard(user) {
     $('addTask').hidden = !writeAllowed();
     await refresh();
 }
-async function refresh() { const { data, error } = await db.from('tasks').select('*').order('created_at', { ascending: false }); if (error) {
-    $('taskMessage').textContent = 'Unable to load tasks: ' + error.message;
-    return;
-} tasks = data || []; render(); await loadActivity(true); }
+// Fetch the latest task records and recalculate every dashboard summary.
+// The Refresh button uses showFeedback=true so a successful reload is visible
+// even when no one has changed the underlying records.
+async function refresh({ showFeedback = false } = {}) {
+    const refreshButton = $('refreshTasks');
+    if (showFeedback) {
+        refreshButton.disabled = true;
+        refreshButton.textContent = '↻ Refreshing…';
+        refreshButton.setAttribute('aria-busy', 'true');
+    }
+
+    try {
+        const { data, error } = await db
+            .from('tasks')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        tasks = data || [];
+        render(); // Task list, completion, categories and budget totals.
+        await loadActivity(true); // Also refresh the activity history.
+
+        if (showFeedback) {
+            const time = new Date().toLocaleTimeString([], {
+                hour: '2-digit', minute: '2-digit'
+            });
+            refreshButton.textContent = `✓ Updated ${time}`;
+        }
+        return true;
+    } catch (error) {
+        $('taskMessage').textContent = 'Unable to refresh tasks: ' + error.message;
+        if (showFeedback) {
+            refreshButton.textContent = 'Refresh failed — Retry';
+        }
+        return false;
+    } finally {
+        if (showFeedback) {
+            refreshButton.disabled = false;
+            refreshButton.removeAttribute('aria-busy');
+        }
+    }
+}
 function render() {
     const completed = tasks.filter(t => t.status === 'Completed').length;
     const progressing = tasks.filter(t => t.status === 'In progress').length;
@@ -225,8 +264,10 @@ $('logout').addEventListener('click', async () => { if (db)
 $('filterStatus').addEventListener('change', render);
 $('filterCategory').addEventListener('change', render);
 $('searchTasks').addEventListener('input', render);
-$('refreshTasks').addEventListener('click', () => { if (db && $('dashboard').hidden === false)
-    refresh(); });
+$('refreshTasks').addEventListener('click', async () => {
+    if (!db || $('dashboard').hidden) return;
+    await refresh({ showFeedback: true });
+});
 function renderBreakdowns() {
     const groups = [...new Set(tasks.map(t => t.category))].sort();
     $('categoryBreakdown').innerHTML = groups.length ? groups.map(c => { const total = tasks.filter(t => t.category === c).length, done = tasks.filter(t => t.category === c && t.status === 'Completed').length; return `<div class="breakdown-row"><div class="breakdown-top"><strong>${escapeHTML(c)}</strong><span>${done} / ${total}</span></div><div class="mini-progress"><span style="width:${100 * done / total}%"></span></div></div>`; }).join('') : '<p class="muted">Categories appear once tasks have been added.</p>';
