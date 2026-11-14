@@ -1175,6 +1175,114 @@ td {
   margin: 0;
 }
 
+
+/* Funeral programme — responsive, easy-to-edit dated timeline */
+.funeral-schedule {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 22px;
+}
+
+.programme-day {
+  background: var(--paper);
+  border: 1px solid #e5dfd2;
+  border-top: 3px solid #baa176;
+  padding: 30px 34px;
+  min-width: 0;
+}
+
+.programme-day-featured {
+  border-top-color: var(--forest);
+}
+
+.programme-day-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 18px;
+  padding-bottom: 20px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.programme-day-kicker {
+  margin: 0 0 8px;
+  color: #876a42;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .10em;
+}
+
+.programme-day-heading h3 {
+  margin: 0;
+  font: 500 clamp(25px, 3vw, 34px)/1.2 'Playfair Display', serif;
+  color: var(--forest);
+}
+
+.programme-day-marker {
+  color: #c4b69e;
+  font: italic 33px 'Playfair Display', serif;
+}
+
+.programme-timeline {
+  display: grid;
+}
+
+.programme-item {
+  display: grid;
+  grid-template-columns: 125px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+  padding: 17px 0;
+}
+
+.programme-item + .programme-item {
+  border-top: 1px solid var(--line);
+}
+
+.programme-time {
+  display: block;
+  color: #876a42;
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.programme-event h4 {
+  margin: 0 0 4px;
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.programme-event p {
+  margin: 0;
+  color: #626e65;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.programme-source-note {
+  margin: 20px 0 0;
+  color: #6e786f;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+@media (max-width: 600px) {
+  .programme-day { padding: 24px 20px; }
+  .programme-day-marker { font-size: 26px; }
+  .programme-item {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 5px;
+    padding: 15px 0;
+  }
+  .programme-time { font-size: 14px; }
+  .programme-event h4 { font-size: 17px; }
+  .programme-event p { font-size: 15px; }
+}
+
 .memory-gallery-section {
   background: #f5f4ee;
 }
