@@ -261,10 +261,13 @@ function render() {
     $('spentTotal').textContent = money(confirmedTotal);
     $('paidTotal').textContent = money(paid);
     $('outstandingTotal').textContent = money(outstanding);
-    $('budgetSummary').textContent = `${confirmed.length} of ${tasks.length} task costs confirmed · `
-        + `Outstanding includes ${money(provisionalOutstanding)} provisionally based on estimates `
-        + `for ${pendingCount} pending task${pendingCount === 1 ? '' : 's'}. `
-        + 'All amounts are in Nigerian Naira (NGN).';
+const confirmedOutstanding = outstanding - provisionalOutstanding;
+$('budgetSummary').textContent =
+    `${tasks.length} tasks: ${confirmed.length} with confirmed actual costs and `
+    + `${pendingCount} awaiting confirmation. `
+    + `Total outstanding balance: ${money(outstanding)}, comprising `
+    + `${money(confirmedOutstanding)} for confirmed-cost tasks and `
+    + `${money(provisionalOutstanding)} for tasks with estimated costs.`;
     renderBreakdowns();
     const cats = [...new Set(tasks.map(t => t.category))].sort();
     const existing = $('filterCategory').value;
