@@ -2202,7 +2202,13 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   white-space: nowrap;
 }
 
-/* Payment summary inside the existing Budget overview panel. */
+/* A fully paid task is highlighted in green. */
+.portal-v2 .payment-percentage.payment-complete {
+  color: #187345;
+  font-weight: 800;
+}
+
+/* Cost monitoring summary. */
 .budget-payment-summary {
   display: flex;
   flex-wrap: wrap;
@@ -2216,16 +2222,20 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-#taskActual[readonly] {
+#taskActual[readonly],
+#taskOutstanding[readonly] {
   background: #f3f3ee;
   color: var(--forest);
   font-weight: 700;
 }
 
-/* Budget overview — large, single-line values on every screen. */
+/* Four readable financial cards on desktop, two on tablets. */
 .budget-stats {
   margin-top: 18px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (max-width: 1150px) {
+  .portal-v2 .budget-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 .portal-v2 .budget-stats .stat-card {
@@ -2233,7 +2243,7 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 }
 
 .portal-v2 .budget-stats .stat-number {
-  font-size: 32px;
+  font-size: clamp(22px, 2.1vw, 32px);
   line-height: 1.2;
   letter-spacing: -0.035em;
   font-variant-numeric: tabular-nums;
