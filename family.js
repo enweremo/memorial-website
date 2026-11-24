@@ -16,6 +16,12 @@ const ACTIVITY_PAGE_SIZE = 30;
 const writeAllowed = () => memberRole === 'admin' || memberRole === 'editor';
 const deleteAllowed = () => memberRole === 'admin';
 const money = n => new Intl.NumberFormat(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 0 }).format(Number(n) || 0);
+// Percentage of committed cost already paid (unrelated to task-status progress).
+const paymentCompletion = task => {
+    const cost = Number(task.actual) || 0;
+    const paid = Number(task.part_payment) || 0;
+    return cost > 0 ? Math.min(100, Math.max(0, (paid / cost) * 100)) : null;
+};
 const escapeHTML = x => String(x ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const statusClass = s => s === 'Completed' ? 'completed' : s === 'In progress' ? 'in-progress' : s === 'Blocked' ? 'blocked' : '';
 // ------------------------------------------------------------
@@ -241,9 +247,17 @@ function render() {
     $('progressBar').style.width = pct + '%';
     const planned = tasks.reduce((a, t) => a + Number(t.budget || 0), 0);
     const actual = tasks.reduce((a, t) => a + Number(t.actual || 0), 0);
+    const paid = tasks.reduce((a, t) => a + Number(t.part_payment || 0), 0);
+    const outstanding = tasks.reduce((a, t) => a + Number(t.outstanding_balance || 0), 0);
     $('budgetTotal').textContent = money(planned);
     $('spentTotal').textContent = money(actual);
-    $('budgetSummary').textContent = (actual > planned ? 'Spending above estimate by ' : 'Remaining estimated budget: ') + money(Math.abs(planned - actual)) + ' · Confirm the currency with the family treasurer.';
+    $('paidTotal').textContent = money(paid);
+    $('outstandingTotal').textContent = money(outstanding);
+    $('budgetSummary').textContent = (paid > planned
+        ? 'Payments exceed the estimated budget by ' + money(paid - planned)
+        : 'Remaining estimated budget after payments: ' + money(planned - paid))
+        + ' · Outstanding obligations: ' + money(outstanding)
+        + ' · Confirm the currency with the family treasurer.';
     renderBreakdowns();
     const cats = [...new Set(tasks.map(t => t.category))].sort();
     const existing = $('filterCategory').value;
@@ -251,7 +265,7 @@ function render() {
     $('filterCategory').value = cats.includes(existing) ? existing : '';
     const term = $('searchTasks').value.trim().toLocaleLowerCase();
     const rows = tasks.filter(t => (!$('filterCategory').value || t.category === $('filterCategory').value) && (!$('filterStatus').value || t.status === $('filterStatus').value) && (!term || [t.title, t.category, t.assigned_to, t.notes].some(v => String(v ?? '').toLocaleLowerCase().includes(term))));
-    $('taskRows').innerHTML = rows.map(t => `<tr><td><strong>${escapeHTML(t.title)}</strong><div class="muted">${escapeHTML(t.category)}</div></td><td>${escapeHTML(t.assigned_to || '—')}</td><td>${escapeHTML(t.due_date || '—')}</td><td><span class="status ${statusClass(t.status)}">${escapeHTML(t.status)}</span></td><td>${money(t.budget)}</td><td>${money(t.actual)}</td><td>${writeAllowed() ? `<button class="text-button" type="button" data-edit="${t.id}" aria-label="Edit ${escapeHTML(t.title)}">Edit</button>` : 'View only'}${deleteAllowed() ? ` <button class="text-button" type="button" data-delete="${t.id}" aria-label="Delete ${escapeHTML(t.title)}" style="color:#a44747">Delete</button>` : ''}</td></tr>`).join('');
+    $('taskRows').innerHTML = rows.map(t => `<tr><td><strong>${escapeHTML(t.title)}</strong><div class="muted">${escapeHTML(t.category)}</div></td><td>${escapeHTML(t.assigned_to || '—')}</td><td>${escapeHTML(t.due_date || '—')}</td><td><span class="status ${statusClass(t.status)}">${escapeHTML(t.status)}</span></td><td>${money(t.budget)}</td><td>${money(t.part_payment)}</td><td>${money(t.outstanding_balance)}</td><td>${money(t.actual)}</td><td><span class="payment-percentage">${paymentCompletion(t) === null ? '—' : paymentCompletion(t).toFixed(1) + '%'}</span></td><td>${writeAllowed() ? `<button class="text-button" type="button" data-edit="${t.id}" aria-label="Edit ${escapeHTML(t.title)}">Edit</button>` : 'View only'}${deleteAllowed() ? ` <button class="text-button" type="button" data-delete="${t.id}" aria-label="Delete ${escapeHTML(t.title)}" style="color:#a44747">Delete</button>` : ''}</td></tr>`).join('');
     $('taskMessage').textContent = rows.length ? '' : tasks.length ? 'No tasks match the filters.' : 'No preparation tasks yet. Add your first task.';
 }
 $('loginForm').addEventListener('submit', async (e) => { e.preventDefault(); if (!db)
@@ -279,8 +293,18 @@ function renderBreakdowns() {
     $('upcomingTasks').innerHTML = urgent.length ? urgent.map(t => `<div class="attention-item"><div><strong>${escapeHTML(t.title)}</strong><small>${escapeHTML(t.assigned_to || 'Unassigned')}</small></div><span class="${t.when < today ? 'due-overdue' : 'due-soon'}">${t.when < today ? 'Overdue' : 'Due'} · ${escapeHTML(t.due_date)}</span></div>`).join('') : '<p class="muted">No overdue or upcoming tasks in the next seven days.</p>';
 }
 $('exportCsv').addEventListener('click', () => { if ($('dashboard').hidden)
-    return; const fields = ['title', 'category', 'status', 'assigned_to', 'due_date', 'budget', 'actual', 'notes']; const quote = v => '"' + String(v ?? '').replace(/"/g, '""') + '"'; const csv = [fields.map(quote).join(','), ...tasks.map(t => fields.map(f => quote(t[f])).join(','))].join('\r\n'); const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'family-burial-tasks.csv'; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); });
-function openEditor(task) { $('taskForm').reset(); $('formError').textContent = ''; $('dialogTitle').textContent = task ? 'Edit task' : 'Add task'; $('taskId').value = task?.id || ''; $('taskTitle').value = task?.title || ''; $('taskCategory').value = task?.category || 'Funeral arrangements'; $('taskStatus').value = task?.status || 'Not started'; $('taskOwner').value = task?.assigned_to || ''; $('taskDue').value = task?.due_date || ''; $('taskBudget').value = task?.budget ?? 0; $('taskActual').value = task?.actual ?? 0; $('taskNotes').value = task?.notes || ''; $('taskDialog').showModal(); }
+    return; const fields = ['title', 'category', 'status', 'assigned_to', 'due_date', 'budget', 'part_payment', 'outstanding_balance', 'actual', 'payment_completion_percent', 'notes']; const quote = v => '"' + String(v ?? '').replace(/"/g, '""') + '"'; const csv = [fields.map(quote).join(','), ...tasks.map(t => fields.map(f => quote(f === 'payment_completion_percent' ? (paymentCompletion(t) === null ? '' : paymentCompletion(t).toFixed(1)) : t[f])).join(','))].join('\r\n'); const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'family-burial-tasks.csv'; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); });
+function openEditor(task) { $('taskForm').reset(); $('formError').textContent = ''; $('dialogTitle').textContent = task ? 'Edit task' : 'Add task'; $('taskId').value = task?.id || ''; $('taskTitle').value = task?.title || ''; $('taskCategory').value = task?.category || 'Funeral arrangements'; $('taskStatus').value = task?.status || 'Not started'; $('taskOwner').value = task?.assigned_to || ''; $('taskDue').value = task?.due_date || ''; $('taskBudget').value = task?.budget ?? 0; $('taskPartPayment').value = task?.part_payment ?? 0; $('taskOutstanding').value = task?.outstanding_balance ?? 0; calculateActualCost(); $('taskNotes').value = task?.notes || ''; $('taskDialog').showModal(); }
+// Cumulative amount paid + remaining obligation = actual total cost.
+// Actual is read-only in the form and also recomputed by PostgreSQL.
+function calculateActualCost() {
+    const paid = Number($('taskPartPayment').value) || 0;
+    const owed = Number($('taskOutstanding').value) || 0;
+    $('taskActual').value = (paid + owed).toFixed(2);
+}
+$('taskPartPayment').addEventListener('input', calculateActualCost);
+$('taskOutstanding').addEventListener('input', calculateActualCost);
+
 $('addTask').addEventListener('click', () => { if (writeAllowed())
     openEditor(null); });
 // Event delegation supports Edit and Admin-only Delete actions for every task row.
@@ -335,7 +359,11 @@ $('taskForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!writeAllowed())
         return;
-    const payload = { title: $('taskTitle').value.trim(), category: $('taskCategory').value, status: $('taskStatus').value, assigned_to: $('taskOwner').value.trim() || null, due_date: $('taskDue').value || null, budget: Number($('taskBudget').value) || 0, actual: Number($('taskActual').value) || 0, notes: $('taskNotes').value.trim() || null };
+    const payload = { title: $('taskTitle').value.trim(), category: $('taskCategory').value, status: $('taskStatus').value, assigned_to: $('taskOwner').value.trim() || null, due_date: $('taskDue').value || null, budget: Number($('taskBudget').value) || 0, part_payment: Number($('taskPartPayment').value) || 0, outstanding_balance: Number($('taskOutstanding').value) || 0, notes: $('taskNotes').value.trim() || null };
+    if ([payload.budget, payload.part_payment, payload.outstanding_balance].some(value => !Number.isFinite(value) || value < 0)) {
+        $('formError').textContent = 'Enter non-negative amounts for all cost fields.';
+        return;
+    }
     if (!payload.title) {
         $('formError').textContent = 'Please enter a task title.';
         return;
@@ -362,13 +390,15 @@ const AUDIT_FIELDS = [
     ['assigned_to', 'Assigned to'],
     ['due_date', 'Due date'],
     ['budget', 'Estimated cost'],
+    ['part_payment', 'Part payment'],
+    ['outstanding_balance', 'Outstanding balance'],
     ['actual', 'Actual cost'],
     ['notes', 'Notes']
 ];
 
 function readableAuditValue(field, value) {
     if (value === null || value === undefined || value === '') return '—';
-    if (field === 'budget' || field === 'actual') return money(value);
+    if (['budget', 'part_payment', 'outstanding_balance', 'actual'].includes(field)) return money(value);
     return String(value);
 }
 
@@ -380,7 +410,7 @@ function auditChanges(entry) {
     return AUDIT_FIELDS.filter(([key]) =>
         entry.action === 'created'
             ? (after[key] !== null && after[key] !== undefined && after[key] !== '' &&
-               (key !== 'budget' && key !== 'actual' || Number(after[key]) !== 0))
+               (!['budget', 'part_payment', 'outstanding_balance', 'actual'].includes(key) || Number(after[key]) !== 0))
             : JSON.stringify(before[key] ?? null) !== JSON.stringify(after[key] ?? null)
     ).map(([key, label]) => ({
         label,

@@ -2194,6 +2194,34 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
 
+/* Task checklist: keep payment completion readable in the scrollable table. */
+.portal-v2 .payment-percentage {
+  color: var(--forest);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Payment summary inside the existing Budget overview panel. */
+.budget-payment-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  margin: 18px 0 8px;
+  color: var(--muted);
+  font-size: 15px;
+}
+.budget-payment-summary strong {
+  color: var(--forest);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+#taskActual[readonly] {
+  background: #f3f3ee;
+  color: var(--forest);
+  font-weight: 700;
+}
+
 /* Budget overview — large, single-line values on every screen. */
 .budget-stats {
   margin-top: 18px;
