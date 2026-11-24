@@ -271,18 +271,10 @@
           <th>
            Status
           </th>
-          <th>
-           Budget
-          </th>
-          <th>
-           Payment made
-          </th>
-          <th>
-           Outstanding
-          </th>
-          <th>
-           Actual budget
-          </th>
+          <th>Estimated budget (₦)</th>
+          <th>Actual cost (₦)</th>
+          <th>Payment made (₦)</th>
+          <th>Outstanding (₦)</th>
           <th>
            Payment completion
           </th>
@@ -311,24 +303,24 @@
        </h2>
       </div>
       <span class="muted">
-       Amounts shown in a single family-selected currency
+       All amounts in Nigerian Naira (NGN / ₦)
       </span>
      </div>
      <div class="stats budget-stats">
       <div class="stat-card">
-       <div class="stat-label">Estimated budget</div>
+       <div class="stat-label">Estimated budget (₦)</div>
        <div class="stat-number" id="budgetTotal">0</div>
       </div>
       <div class="stat-card">
-       <div class="stat-label">Payment made</div>
+       <div class="stat-label">Payment made (₦)</div>
        <div class="stat-number" id="paidTotal">0</div>
       </div>
       <div class="stat-card">
-       <div class="stat-label">Outstanding</div>
+       <div class="stat-label">Outstanding (₦)</div>
        <div class="stat-number" id="outstandingTotal">0</div>
       </div>
       <div class="stat-card">
-       <div class="stat-label">Actual budget</div>
+       <div class="stat-label">Confirmed actual costs (₦)</div>
        <div class="stat-number" id="spentTotal">0</div>
       </div>
      </div>
@@ -421,20 +413,21 @@
       <input id="taskDue" type="date"/>
      </label>
      <label class="field">
-      Estimated cost
-      <input id="taskBudget" min="0" step="0.01" type="number" value="0"/>
+      Estimated budget (₦)
+      <input id="taskBudget" min="0" step="1" type="number" value="0"/>
      </label>
      <label class="field">
-      Payment made (total paid so far)
-      <input id="taskPartPayment" min="0" step="0.01" type="number" value="0" required/>
+      Payment made (₦, total paid so far)
+      <input id="taskPartPayment" min="0" step="1" type="number" value="0" required/>
      </label>
      <label class="field">
-      Outstanding (estimated minus paid)
-      <input id="taskOutstanding" min="0" step="0.01" type="number" value="0" readonly aria-readonly="true"/>
+      Actual cost (₦, optional until confirmed)
+      <input id="taskConfirmedActual" min="0" step="1" type="number" placeholder="Leave blank if pending"/>
      </label>
      <label class="field">
-      Actual budget (paid + outstanding)
-      <input id="taskActual" min="0" step="0.01" type="number" value="0" readonly aria-readonly="true"/>
+      Outstanding (₦, calculated)
+      <input id="taskOutstanding" min="0" step="1" type="number" value="0" readonly aria-readonly="true"/>
+      <small id="taskOutstandingHint" class="muted">Provisional: based on estimated budget.</small>
      </label>
     </div>
     <label class="field">

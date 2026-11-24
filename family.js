@@ -15,10 +15,13 @@ let activityHasMore = false;
 const ACTIVITY_PAGE_SIZE = 30;
 const writeAllowed = () => memberRole === 'admin' || memberRole === 'editor';
 const deleteAllowed = () => memberRole === 'admin';
-const money = n => new Intl.NumberFormat(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 0 }).format(Number(n) || 0);
-// Percentage of the task's revised budget covered by payments (independent of task status).
+const money = n => '₦' + new Intl.NumberFormat('en-NG', { maximumFractionDigits: 0, minimumFractionDigits: 0 }).format(Number(n) || 0);
+const hasConfirmedCost = task => task.confirmed_actual_cost !== null && task.confirmed_actual_cost !== undefined;
+const basisCost = task => hasConfirmedCost(task) ? Number(task.confirmed_actual_cost) : Number(task.budget) || 0;
+const outstandingFor = task => Math.max(0, basisCost(task) - (Number(task.part_payment) || 0));
+// If the actual cost is pending, use the estimate temporarily as the payment basis.
 const paymentCompletion = task => {
-    const cost = Number(task.actual) || 0;
+    const cost = basisCost(task);
     const paid = Number(task.part_payment) || 0;
     return cost > 0 ? Math.min(100, Math.max(0, (paid / cost) * 100)) : null;
 };
@@ -245,19 +248,23 @@ function render() {
     const pct = tasks.length ? Math.round(completed / tasks.length * 100) : 0;
     $('percentage').textContent = pct + '%';
     $('progressBar').style.width = pct + '%';
-    const planned = tasks.reduce((a, t) => a + Number(t.budget || 0), 0);
-        const paid = tasks.reduce((a, t) => a + Number(t.part_payment || 0), 0);
-    const outstanding = tasks.reduce((sum, t) => sum + Math.max(0, (Number(t.budget) || 0) - (Number(t.part_payment) || 0)), 0);
-    $('budgetTotal').textContent = money(planned);
-    $('spentTotal').textContent = money(paid + outstanding);
+    const estimated = tasks.reduce((sum, t) => sum + (Number(t.budget) || 0), 0);
+    const paid = tasks.reduce((sum, t) => sum + (Number(t.part_payment) || 0), 0);
+    const outstanding = tasks.reduce((sum, t) => sum + outstandingFor(t), 0);
+    const confirmed = tasks.filter(hasConfirmedCost);
+    const confirmedTotal = confirmed.reduce((sum, t) => sum + Number(t.confirmed_actual_cost), 0);
+    const pendingCount = tasks.length - confirmed.length;
+    const provisionalOutstanding = tasks.filter(t => !hasConfirmedCost(t))
+        .reduce((sum, t) => sum + outstandingFor(t), 0);
+
+    $('budgetTotal').textContent = money(estimated);
+    $('spentTotal').textContent = money(confirmedTotal);
     $('paidTotal').textContent = money(paid);
     $('outstandingTotal').textContent = money(outstanding);
-    const overBudget = tasks.reduce((sum, task) => sum + Math.max(0,
-        (Number(task.part_payment) || 0) - (Number(task.budget) || 0)), 0);
-    $('budgetSummary').textContent = 'Actual budget = Payments made + Outstanding = '
-        + money(paid + outstanding)
-        + (overBudget > 0 ? ' · Amount paid above individual task estimates: ' + money(overBudget) : '')
-        + ' · Figures use the family-selected currency.';
+    $('budgetSummary').textContent = `${confirmed.length} of ${tasks.length} task costs confirmed · `
+        + `Outstanding includes ${money(provisionalOutstanding)} provisionally based on estimates `
+        + `for ${pendingCount} pending task${pendingCount === 1 ? '' : 's'}. `
+        + 'All amounts are in Nigerian Naira (NGN).';
     renderBreakdowns();
     const cats = [...new Set(tasks.map(t => t.category))].sort();
     const existing = $('filterCategory').value;
@@ -265,7 +272,25 @@ function render() {
     $('filterCategory').value = cats.includes(existing) ? existing : '';
     const term = $('searchTasks').value.trim().toLocaleLowerCase();
     const rows = tasks.filter(t => (!$('filterCategory').value || t.category === $('filterCategory').value) && (!$('filterStatus').value || t.status === $('filterStatus').value) && (!term || [t.title, t.category, t.assigned_to, t.notes].some(v => String(v ?? '').toLocaleLowerCase().includes(term))));
-    $('taskRows').innerHTML = rows.map(t => `<tr><td><strong>${escapeHTML(t.title)}</strong><div class="muted">${escapeHTML(t.category)}</div></td><td>${escapeHTML(t.assigned_to || '—')}</td><td>${escapeHTML(t.due_date || '—')}</td><td><span class="status ${statusClass(t.status)}">${escapeHTML(t.status)}</span></td><td>${money(t.budget)}</td><td>${money(t.part_payment)}</td><td>${money(t.outstanding_balance)}</td><td>${money(t.actual)}</td><td><span class="payment-percentage${paymentCompletion(t) === 100 ? ' payment-complete' : ''}">${paymentCompletion(t) === null ? '—' : paymentCompletion(t).toFixed(1) + '%'}</span></td><td>${writeAllowed() ? `<button class="text-button" type="button" data-edit="${t.id}" aria-label="Edit ${escapeHTML(t.title)}">Edit</button>` : 'View only'}${deleteAllowed() ? ` <button class="text-button" type="button" data-delete="${t.id}" aria-label="Delete ${escapeHTML(t.title)}" style="color:#a44747">Delete</button>` : ''}</td></tr>`).join('');
+    $('taskRows').innerHTML = rows.map(t => {
+        const completion = paymentCompletion(t);
+        const pending = !hasConfirmedCost(t);
+        const completionLabel = completion === null ? '—'
+            : `${completion.toFixed(0)}%${pending ? ' (est.)' : ''}`;
+        const confirmationLabel = pending ? 'Pending' : money(t.confirmed_actual_cost);
+        return `<tr>
+            <td><strong>${escapeHTML(t.title)}</strong><div class="muted">${escapeHTML(t.category)}</div></td>
+            <td>${escapeHTML(t.assigned_to || '—')}</td>
+            <td>${escapeHTML(t.due_date || '—')}</td>
+            <td><span class="status ${statusClass(t.status)}">${escapeHTML(t.status)}</span></td>
+            <td>${money(t.budget)}</td>
+            <td>${confirmationLabel}</td>
+            <td>${money(t.part_payment)}</td>
+            <td>${money(outstandingFor(t))}${pending ? '<small class="muted"> (est.)</small>' : ''}</td>
+            <td><span class="payment-percentage${completion === 100 ? ' payment-complete' : ''}">${completionLabel}</span></td>
+            <td>${writeAllowed() ? `<button class="text-button" type="button" data-edit="${t.id}" aria-label="Edit ${escapeHTML(t.title)}">Edit</button>` : 'View only'}${deleteAllowed() ? ` <button class="text-button" type="button" data-delete="${t.id}" aria-label="Delete ${escapeHTML(t.title)}" style="color:#a44747">Delete</button>` : ''}</td>
+        </tr>`;
+    }).join('');
     $('taskMessage').textContent = rows.length ? '' : tasks.length ? 'No tasks match the filters.' : 'No preparation tasks yet. Add your first task.';
 }
 $('loginForm').addEventListener('submit', async (e) => { e.preventDefault(); if (!db)
@@ -293,20 +318,40 @@ function renderBreakdowns() {
     $('upcomingTasks').innerHTML = urgent.length ? urgent.map(t => `<div class="attention-item"><div><strong>${escapeHTML(t.title)}</strong><small>${escapeHTML(t.assigned_to || 'Unassigned')}</small></div><span class="${t.when < today ? 'due-overdue' : 'due-soon'}">${t.when < today ? 'Overdue' : 'Due'} · ${escapeHTML(t.due_date)}</span></div>`).join('') : '<p class="muted">No overdue or upcoming tasks in the next seven days.</p>';
 }
 $('exportCsv').addEventListener('click', () => { if ($('dashboard').hidden)
-    return; const fields = ['title', 'category', 'status', 'assigned_to', 'due_date', 'budget', 'part_payment', 'outstanding_balance', 'actual', 'payment_completion_percent', 'notes']; const quote = v => '"' + String(v ?? '').replace(/"/g, '""') + '"'; const csv = [fields.map(quote).join(','), ...tasks.map(t => fields.map(f => quote(f === 'payment_completion_percent' ? (paymentCompletion(t) === null ? '' : paymentCompletion(t).toFixed(1)) : t[f])).join(','))].join('\r\n'); const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'family-burial-tasks.csv'; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); });
-function openEditor(task) { $('taskForm').reset(); $('formError').textContent = ''; $('dialogTitle').textContent = task ? 'Edit task' : 'Add task'; $('taskId').value = task?.id || ''; $('taskTitle').value = task?.title || ''; $('taskCategory').value = task?.category || 'Funeral arrangements'; $('taskStatus').value = task?.status || 'Not started'; $('taskOwner').value = task?.assigned_to || ''; $('taskDue').value = task?.due_date || ''; $('taskBudget').value = task?.budget ?? 0; $('taskPartPayment').value = task?.part_payment ?? 0; $('taskOutstanding').value = task ? Math.max(0, (Number(task.budget) || 0) - (Number(task.part_payment) || 0)) : 0; calculateActualCost(); $('taskNotes').value = task?.notes || ''; $('taskDialog').showModal(); }
-// Outstanding is derived from the task's original estimate minus payments.
-// Actual Budget = Payment Made + Outstanding. Both are read-only and
-// recalculated by PostgreSQL so another client cannot bypass these formulas.
-function calculateActualCost() {
-    const budget = Number($('taskBudget').value) || 0;
-    const paid = Number($('taskPartPayment').value) || 0;
-    const owed = Math.max(0, budget - paid);
-    $('taskOutstanding').value = owed.toFixed(2);
-    $('taskActual').value = (paid + owed).toFixed(2);
+    return; const fields = ['title', 'category', 'status', 'assigned_to', 'due_date', 'budget', 'confirmed_actual_cost', 'part_payment', 'outstanding_balance', 'payment_completion_percent', 'notes']; const quote = v => '"' + String(v ?? '').replace(/"/g, '""') + '"'; const csv = [fields.map(quote).join(','), ...tasks.map(t => fields.map(f => quote(f === 'payment_completion_percent' ? (paymentCompletion(t) === null ? '' : paymentCompletion(t).toFixed(0)) : f === 'outstanding_balance' ? outstandingFor(t) : t[f])).join(','))].join('\r\n'); const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'family-burial-tasks.csv'; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); });
+function openEditor(task) {
+    $('taskForm').reset();
+    $('formError').textContent = '';
+    $('dialogTitle').textContent = task ? 'Edit task' : 'Add task';
+    $('taskId').value = task?.id || '';
+    $('taskTitle').value = task?.title || '';
+    $('taskCategory').value = task?.category || 'Funeral arrangements';
+    $('taskStatus').value = task?.status || 'Not started';
+    $('taskOwner').value = task?.assigned_to || '';
+    $('taskDue').value = task?.due_date || '';
+    $('taskBudget').value = task?.budget ?? 0;
+    $('taskConfirmedActual').value = hasConfirmedCost(task || {}) ? task.confirmed_actual_cost : '';
+    $('taskPartPayment').value = task?.part_payment ?? 0;
+    calculateOutstanding();
+    $('taskNotes').value = task?.notes || '';
+    $('taskDialog').showModal();
 }
-$('taskBudget').addEventListener('input', calculateActualCost);
-$('taskPartPayment').addEventListener('input', calculateActualCost);
+
+// Actual cost is deliberately optional until the family knows the agreed cost.
+// Outstanding is provisional until then, based on the estimate.
+function calculateOutstanding() {
+    const estimate = Number($('taskBudget').value) || 0;
+    const confirmedInput = $('taskConfirmedActual').value.trim();
+    const basis = confirmedInput === '' ? estimate : Number(confirmedInput);
+    const paid = Number($('taskPartPayment').value) || 0;
+    $('taskOutstanding').value = Math.max(0, basis - paid).toFixed(0);
+    $('taskOutstandingHint').textContent = confirmedInput === ''
+        ? 'Provisional: based on estimated budget.'
+        : 'Confirmed: based on actual cost.';
+}
+$('taskBudget').addEventListener('input', calculateOutstanding);
+$('taskConfirmedActual').addEventListener('input', calculateOutstanding);
+$('taskPartPayment').addEventListener('input', calculateOutstanding);
 
 $('addTask').addEventListener('click', () => { if (writeAllowed())
     openEditor(null); });
@@ -362,8 +407,8 @@ $('taskForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!writeAllowed())
         return;
-    const payload = { title: $('taskTitle').value.trim(), category: $('taskCategory').value, status: $('taskStatus').value, assigned_to: $('taskOwner').value.trim() || null, due_date: $('taskDue').value || null, budget: Number($('taskBudget').value) || 0, part_payment: Number($('taskPartPayment').value) || 0, notes: $('taskNotes').value.trim() || null };
-    if ([payload.budget, payload.part_payment].some(value => !Number.isFinite(value) || value < 0)) {
+    const payload = { title: $('taskTitle').value.trim(), category: $('taskCategory').value, status: $('taskStatus').value, assigned_to: $('taskOwner').value.trim() || null, due_date: $('taskDue').value || null, budget: Number($('taskBudget').value) || 0, confirmed_actual_cost: $('taskConfirmedActual').value.trim() === '' ? null : Number($('taskConfirmedActual').value), part_payment: Number($('taskPartPayment').value) || 0, notes: $('taskNotes').value.trim() || null };
+    if ([payload.budget, payload.part_payment, payload.confirmed_actual_cost].some(value => value !== null && (!Number.isFinite(value) || value < 0))) {
         $('formError').textContent = 'Enter non-negative amounts for all cost fields.';
         return;
     }
@@ -392,16 +437,17 @@ const AUDIT_FIELDS = [
     ['status', 'Status'],
     ['assigned_to', 'Assigned to'],
     ['due_date', 'Due date'],
-    ['budget', 'Estimated cost'],
+    ['budget', 'Estimated budget'],
+    ['confirmed_actual_cost', 'Confirmed actual cost'],
     ['part_payment', 'Payment made'],
-    ['outstanding_balance', 'Outstanding balance (estimated)'],
-    ['actual', 'Actual cost'],
+    ['outstanding_balance', 'Outstanding balance'],
+    // The legacy 'actual' database column is internal, not the confirmed actual cost.
     ['notes', 'Notes']
 ];
 
 function readableAuditValue(field, value) {
     if (value === null || value === undefined || value === '') return '—';
-    if (['budget', 'part_payment', 'outstanding_balance', 'actual'].includes(field)) return money(value);
+    if (['budget', 'confirmed_actual_cost', 'part_payment', 'outstanding_balance'].includes(field)) return money(value);
     return String(value);
 }
 
@@ -413,7 +459,7 @@ function auditChanges(entry) {
     return AUDIT_FIELDS.filter(([key]) =>
         entry.action === 'created'
             ? (after[key] !== null && after[key] !== undefined && after[key] !== '' &&
-               (!['budget', 'part_payment', 'outstanding_balance', 'actual'].includes(key) || Number(after[key]) !== 0))
+               (!['budget', 'confirmed_actual_cost', 'part_payment', 'outstanding_balance'].includes(key) || Number(after[key]) !== 0))
             : JSON.stringify(before[key] ?? null) !== JSON.stringify(after[key] ?? null)
     ).map(([key, label]) => ({
         label,
